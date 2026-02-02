@@ -172,4 +172,23 @@ if st.button("Решить и сравнить"):
     ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2); st.pyplot(fig_b)
 
     st.write("Коэффициенты предсказанного сплайна c_i:")
-    st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
+    # --- Базисные функции и Коэффициенты ---
+    st.divider()
+    
+    col_coeffs_ml, col_coeffs_input = st.columns(2)
+    
+    with col_coeffs_ml:
+        st.subheader("Коэффициенты сплайна $c_i$")
+        st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
+
+    with col_coeffs_input:
+        st.subheader("Параметры уравнения")
+        # Сопоставляем p_ml_input с математическими именами из формул
+        param_names = [
+            "log10(eps)", "alpha", "beta", 
+            "p0", "p1", "p2", "w1", "w2", "v1", "v2", 
+            "q0", "q1", "q2", "e1", "e2", "u1", "u2",
+            "j (y^2)", "k (y^3)", 
+            "A (source)", "mu", "log10(sigma)", "c0", "c1", "c2"
+        ]
+        st.json({name: float(val) for name, val in zip(param_names, p_ml_input)})
