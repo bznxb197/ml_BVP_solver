@@ -3,10 +3,21 @@ import numpy as np
 import torch
 import torch.nn as nn
 import joblib
+import time
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_bvp
+from scipy.interpolate import BSpline
 
-# --- 1. Определение архитектуры (V5 Turbo) ---
+# --- Настройки страницы ---
+st.set_page_config(page_title="DeepBVP Solver Pro", layout="wide")
+
+# --- Константы базиса (из твоего генератора) ---
+DEGREE = 3
+N_BASIS = 16 
+knots_internal = np.linspace(0, 1, N_BASIS - DEGREE + 1)
+KNOTS = np.concatenate((np.zeros(DEGREE), knots_internal, np.ones(DEGREE)))
+
+# --- Модель V5 Turbo ---
 class BVPNetTurbo(nn.Module):
     def __init__(self, input_dim=25, output_dim=16):
         super(BVPNetTurbo, self).__init__()
@@ -14,90 +25,152 @@ class BVPNetTurbo(nn.Module):
             nn.Linear(input_dim, 512), nn.GELU(),
             nn.BatchNorm1d(512), nn.Dropout(0.1),
             nn.Linear(512, 256), nn.GELU(),
-            nn.Linear(256, 256), nn.GELU(),
             nn.Linear(256, 128), nn.GELU(),
             nn.Linear(128, output_dim)
         )
     def forward(self, x): return self.net(x)
 
-# --- 2. Функции базиса ---
-def build_bspline_basis(x, n_bases=16):
-    from scipy.interpolate import BSpline
-    knots = np.linspace(0, 1, n_bases - 2)
-    knots = np.pad(knots, (3, 3), mode='edge')
-    basis_funcs = []
-    for i in range(n_bases):
-        coeffs = np.zeros(n_bases)
-        coeffs[i] = 1
-        spline = BSpline(knots, coeffs, k=3)
-        basis_funcs.append(spline(x))
-    return np.array(basis_funcs).T
-
-# --- 3. Загрузка ресурсов ---
 @st.cache_resource
 def load_assets():
     model = BVPNetTurbo()
-    # Загружаем на CPU для сервера
-    model.load_state_dict(torch.load("model_nn_v5_turbo.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("model_nn_v5_turbo.pth", map_location="cpu"))
     model.eval()
     scalers = joblib.load("scalers_v5.pkl")
     return model, scalers
 
-# --- 4. Настройка страницы ---
-st.set_page_config(page_title="DeepBVP Solver", page_icon="📈", layout="centered")
+# --- Математическое ядро ---
+def ode_system_logic(x, y, p):
+    # p[0] здесь уже должен быть реальный eps (не логарифм)
+    eps = p[0]
+    px = p[3] + p[4]*x + p[5]*x**2 + p[6]*np.sin(p[7]*x) + p[8]*np.cos(p[9]*x)
+    qx = p[10] + p[11]*x + p[12]*x**2 + p[13]*np.sin(p[14]*x) + p[15]*np.cos(p[16]*x)
+    fx = p[19]*np.exp(-((x - p[20])/p[21])**2) + p[22] + p[23]*x + p[24]*x**2
+    return np.vstack([y[1], (fx - px*y[1] - qx*y[0] - p[17]*y[0]**2 - p[18]*y[0]**3) / eps])
 
-st.title("🚀 Smart Boundary Value Problem Solver")
-st.markdown("""
-### Нейросетевое ускорение численных методов
-Этот инструмент решает **жесткие краевые задачи** (на примере уравнения Блазиуса). 
-Нейросеть генерирует начальное приближение, которое позволяет классическому решателю сойтись мгновенно.
-""")
+def bc_logic(ya, yb, p):
+    return np.array([ya[0] - p[1], yb[0] - p[2]])
 
-# Сайдбар
-st.sidebar.header("Настройки задачи")
-eps = st.sidebar.select_slider("Параметр ε (вязкость)", options=[0.1, 0.05, 0.01, 0.005, 0.001, 0.0005], value=0.005)
-y_left = st.sidebar.number_input("y(0) [Wall speed]", value=0.0, step=0.1)
-y_right = st.sidebar.number_input("y(1) [Free stream]", value=1.0, step=0.1)
+# --- Интерфейс ---
+st.title("DeepBVP: Hybrid Neural Solver (решатель краевых задач)")
 
-if st.sidebar.button("Рассчитать решение"):
-    with st.spinner('Нейросеть генерирует старт...'):
-        model, scalers = load_assets()
-        x_nodes = np.linspace(0, 1, 100)
-        Phi = build_bspline_basis(x_nodes)
-        
-        # Инференс
-        full_params = np.zeros(25)
-        full_params[0], full_params[1], full_params[2] = np.log10(eps), y_left, y_right
-        p_s = scalers['scaler_x'].transform(full_params.reshape(1, -1))
-        
-        with torch.no_grad():
-            y_coeffs_s = model(torch.FloatTensor(p_s)).numpy()
-            y_coeffs = scalers['scaler_y'].inverse_transform(y_coeffs_s)[0]
-        
-        y_nn = Phi @ y_coeffs
-        guess_nn = np.vstack([y_nn, np.gradient(y_nn, x_nodes)])
-        
-        # Численное уточнение
-        def ode(x, y): return np.vstack([y[1], -y[0]*y[1]/eps])
-        def bc(ya, yb): return np.array([ya[0]-y_left, yb[0]-y_right])
-        
-        res = solve_bvp(ode, bc, x_nodes, guess_nn, tol=1e-5)
+# Описание уравнения
+st.latex(r"\varepsilon y'' + p(x)y' + q(x)y + j y^2 + k y^3 = f(x)")
+with st.expander("Посмотреть структуру функций"):
+    st.latex(r"p(x) = p_0 + p_1 x + p_2 x^2 + w_1 \sin(w_2 x) + v_1 \cos(v_2 x)")
+    st.latex(r"q(x) = q_0 + q_1 x + q_2 x^2 + e_1 \sin(e_2 x) + u_1 \cos(u_2 x)")
+    st.latex(r"f(x) = A \exp\left(-\frac{(x-\mu)^2}{\sigma^2}\right) + c_0 + c_1 x + c_2 x^2")
+
+# --- Сайдбар с 25 параметрами ---
+st.sidebar.header("Параметры ОДУ")
+
+if st.sidebar.button("Случайная задача"):
+    # Генерируем в точности по get_params()
+    st.session_state.p = [
+        np.random.uniform(-4, -1.3), # log10 eps
+        np.random.uniform(-2, 2),    # alpha
+        np.random.uniform(-2, 2),    # beta
+        *np.random.uniform(-3, 3, size=3), # p0,1,2
+        np.random.uniform(-1.5, 1.5),# w1
+        np.random.uniform(1, 5),     # w2
+        np.random.uniform(-1.5, 1.5),# v1
+        np.random.uniform(1, 5),     # v2
+        *np.random.uniform(-3, 3, size=3), # q0,1,2
+        np.random.uniform(-1.5, 1.5),# e1
+        np.random.uniform(1, 5),     # e2
+        np.random.uniform(-1.5, 1.5),# u1
+        np.random.uniform(1, 5),     # u2
+        np.random.uniform(-2.0, 2.0),# j
+        np.random.uniform(-1.0, 1.0),# k
+        np.random.uniform(-4, 4),    # A
+        np.random.uniform(0.2, 0.8), # mu
+        np.random.uniform(-2.0, -0.5),# log10 sigma
+        *np.random.uniform(-3, 3, size=3) # c0,1,2
+    ]
+
+# Инициализация сессии
+if 'p' not in st.session_state:
+    st.session_state.p = [-2.0, 0.0, 1.0] + [0.0]*22
+
+p_ui = []
+# Группировка для удобства
+with st.sidebar.expander("Граничные условия и ε", expanded=True):
+    p_ui.append(st.slider("log10(ε)", -4.0, -1.3, float(st.session_state.p[0])))
+    p_ui.append(st.slider("α (y0)", -2.0, 2.0, float(st.session_state.p[1])))
+    p_ui.append(st.slider("β (y1)", -2.0, 2.0, float(st.session_state.p[2])))
+
+with st.sidebar.expander("Функция p(x)"):
+    for i in range(3, 10):
+        p_ui.append(st.number_input(f"p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+
+with st.sidebar.expander("Функция q(x)"):
+    for i in range(10, 17):
+        p_ui.append(st.number_input(f"p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+
+with st.sidebar.expander("Нелинейность и Источник"):
+    for i in range(17, 25):
+        p_ui.append(st.number_input(f"p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+
+# --- Расчет ---
+if st.button("Решить уравнение"):
+    model, scalers = load_assets()
+    x_nodes = np.linspace(0, 1, 150)
+    
+    # Подготовка параметров
+    p_numeric = np.array(p_ui).copy()
+    p_numeric[0] = 10**p_numeric[0]  # Из log10 в реальный eps
+    if p_numeric[21] < 0: p_numeric[21] = 10**p_numeric[21] # sigma
+    
+    # 1. СТАНДАРТНЫЙ SOLVER (из прямой)
+    y_guess_std = np.vstack([np.linspace(p_numeric[1], p_numeric[2], len(x_nodes)), np.zeros(len(x_nodes))])
+    t0 = time.time()
+    res_std = solve_bvp(lambda x,y: ode_system_logic(x,y,p_numeric), 
+                        lambda ya,yb: bc_logic(ya,yb,p_numeric), 
+                        x_nodes, y_guess_std, tol=1e-3)
+    t_std = time.time() - t0
+
+    # 2. HYBRID SOLVER (ML Start)
+    t1 = time.time()
+    # На вход модели подаем параметры как в датасете (eps уже в log10)
+    p_ml = np.array(p_ui).reshape(1, -1)
+    p_s = scalers['scaler_x'].transform(p_ml)
+    
+    with torch.no_grad():
+        y_coeffs_s = model(torch.FloatTensor(p_s)).numpy()
+        y_coeffs = scalers['scaler_y'].inverse_transform(y_coeffs_s)[0]
+    
+    # Сплайн-приближение
+    spline = BSpline(KNOTS, y_coeffs, DEGREE, extrapolate=False)
+    y_guess_ml = spline(x_nodes)
+    y_guess_ml_stack = np.vstack([y_guess_ml, np.gradient(y_guess_ml, x_nodes)])
+    
+    res_ml = solve_bvp(lambda x,y: ode_system_logic(x,y,p_numeric), 
+                       lambda ya,yb: bc_logic(ya,yb,p_numeric), 
+                       x_nodes, y_guess_ml_stack, tol=1e-3)
+    t_ml = time.time() - t1
 
     # --- Результаты ---
-    if res.success:
-        st.success(f"Решение найдено! Итераций решателя: **{res.niter}**")
-        
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(x_nodes, y_nn, 'r--', alpha=0.5, label='ML Guess (Start)')
-        ax.plot(res.x, res.y[0], 'b-', linewidth=2, label='Final Numeric Solution')
-        ax.set_title(f"Профиль скорости (ε = {eps})")
-        ax.set_xlabel("x")
-        ax.set_ylabel("f(x)")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("Визуализация решения")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(x_nodes, y_guess_ml, 'r--', alpha=0.5, label='ML Initial Guess')
+        if res_ml.success:
+            ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2, label='Hybrid Solution')
+        ax.set_title(f"Solution at ε = {p_numeric[0]:.2e}")
         ax.legend()
-        ax.grid(True, linestyle=':', alpha=0.7)
-        
+        ax.grid(True, alpha=0.2)
         st.pyplot(fig)
-        
-        st.info(f"💡 Без нейросети при таком ε обычный метод мог бы потратить 20+ итераций или не сойтись вовсе.")
-    else:
-        st.error("К сожалению, решатель не сошелся. Попробуйте увеличить ε.")
+
+    with col2:
+        st.subheader("Аналитика")
+        st.table({
+            "Метод": ["Standard", "DeepBVP (Our)"],
+            "Итерации": [res_std.niter if res_std.success else "Fail", res_ml.niter],
+            "Время (сек)": [f"{t_std:.4f}", f"{t_ml:.4f}"]
+        })
+
+    st.subheader("Аналитическая форма сплайна")
+    st.latex(r"y(x) \approx \sum_{i=1}^{16} c_i \cdot B_i(x)")
+    st.write("Коэффициенты $c_i$:")
+    st.json({f"c_{i+1}": float(c) for i, c in enumerate(y_coeffs)})
