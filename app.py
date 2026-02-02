@@ -66,7 +66,6 @@ with st.expander("Математическая структура функций
 
 # --- Боковая панель ---
 st.sidebar.header("Параметры задачи")
-
 col_rand1, col_rand2 = st.sidebar.columns(2)
 
 if col_rand1.button("Случайная"):
@@ -91,10 +90,8 @@ if 'p' not in st.session_state:
     st.session_state.p = [-2.0, 0.0, 1.0] + [0.0]*22
 
 p_ml_input = [] 
-
-# Группировка параметров в боковой панели
 with st.sidebar.expander("Базовые параметры и ГУ", expanded=True):
-    eps_val = st.number_input("Параметр epsilon (ε)", 0.0001, 0.1000, float(10**st.session_state.p[0]), format="%.4f")
+    eps_val = st.number_input("Параметр ε", 0.0001, 0.1000, float(10**st.session_state.p[0]), format="%.4f")
     p_ml_input.append(np.log10(eps_val))
     p_ml_input.append(st.slider("alpha (y0)", -2.0, 2.0, float(st.session_state.p[1])))
     p_ml_input.append(st.slider("beta (y1)", -2.0, 2.0, float(st.session_state.p[2])))
@@ -155,13 +152,13 @@ if st.button("Решить и сравнить"):
 
     # --- Уведомления ---
     if res_std.success and res_ml.success:
-        st.success("Оба метода сошлись.")
+        st.success("Оба метода успешно нашли решение.")
     elif not res_std.success and res_ml.success:
-        st.warning("Стандартный метод не сошелся. Гибрид нашел решение.")
+        st.warning("Стандартный метод провалился. Гибрид нашел решение.")
     else:
-        st.error("Задача слишком сложна для обоих методов.")
+        st.error("Критическая сложность: сходимость не достигнута.")
 
-    # --- Визуализация ---
+    # --- ГРАФИК РЕШЕНИЯ ---
     col_graph, col_stats = st.columns([2, 1])
     with col_graph:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -178,13 +175,25 @@ if st.button("Решить и сравнить"):
                   "Гибрид": [res_ml.niter if res_ml.success else "Провал", evals_ml, f"{t_ml:.4f}"]})
         if res_std.success and res_ml.success: st.metric("Ускорение", f"{evals_std / max(1, evals_ml):.1f}x")
 
-    # --- Анализ ---
+    # --- АНАЛИЗ БАЗИСА ---
     st.divider()
-    st.subheader("Коэффициенты сплайна и параметры")
+    st.subheader("Разложение решения по B-сплайнам")
+    st.latex(r"y_{pred}(x) = \sum_{i=1}^{16} c_i \cdot B_{i,3}(x)")
     
+    
+    
+    fig_b, ax_b = plt.subplots(figsize=(12, 4))
+    x_fine = np.linspace(0, 1, 400)
+    for i in range(N_BASIS):
+        c_i_basis = np.zeros(N_BASIS); c_i_basis[i] = 1.0
+        y_b = y_coeffs[i] * BSpline(KNOTS, c_i_basis, DEGREE)(x_fine)
+        ax_b.plot(x_fine, y_b, alpha=0.5, linestyle='--', label=f'c_{i+1}' if i < 3 else None)
+    ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2.5, label='Resulting Spline')
+    ax_b.grid(True, alpha=0.15); st.pyplot(fig_b)
+
     c1, c2 = st.columns(2)
     with c1:
-        st.write("Веса базисных функций $c_i$:")
+        st.write("Веса сплайнов $c_i$:")
         st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
     with c2:
         st.write("Входные параметры:")
