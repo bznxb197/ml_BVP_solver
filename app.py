@@ -145,7 +145,7 @@ if st.button("Решить и сравнить"):
     col_graph, col_stats = st.columns([2, 1])
     with col_graph:
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(x_nodes, np.linspace(alpha, beta, 150), color='gray', linestyle=':', alpha=0.4, label='Linear Start')
+        ax.plot(x_nodes, np.linspace(alpha, beta, len(x_nodes)), color='gray', linestyle=':', alpha=0.4, label='Linear Start')
         ax.plot(x_nodes, y_ml_init, 'r--', alpha=0.6, label='ML Initial Guess')
         if res_ml.success: ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2.5, label='Hybrid Solution')
         if res_std.success: ax.plot(res_std.x, res_std.y[0], color='orange', linestyle='-.', alpha=0.6, label='Standard Result')
