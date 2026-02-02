@@ -173,7 +173,7 @@ if st.button("Решить уравнение"):
         if res_std.success:
             ax.plot(res_std.x, res_std.y[0], color='orange', linestyle=':', linewidth=2, label='Standard Solver')
         else:
-            st.warning("⚠️ Стандартный метод не смог найти решение (Diverged)")
+            st.warning("Стандартный метод не смог найти решение (Diverged)")
 
         # 3. Синяя линия — результат твоего гибридного метода
         if res_ml.success:
@@ -192,7 +192,7 @@ if st.button("Решить уравнение"):
         st.subheader("📈 Эффективность")
         st.table({
             "Метод": ["Стандартный solve_bvp", "DeepBVP (Hybrid)"],
-            "Итерации": [res_std.niter if res_std.success else "Fail", res_ml.niter if res_ml.success else "❌ Fail"],
+            "Итерации": [res_std.niter if res_std.success else "Fail", res_ml.niter if res_ml.success else "Fail"],
             "Время (сек)": [f"{t_std:.4f}", f"{t_ml:.4f}"],
             "Статус": ["ОК" if res_std.success else "Провал", "ОК" if res_ml.success else "Провал"]
         })
