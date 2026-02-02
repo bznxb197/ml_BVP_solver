@@ -135,11 +135,11 @@ if st.button("Решить и сравнить"):
 
     # --- Уведомления о статусе ---
     if res_std.success and res_ml.success:
-        st.success("Оба метода успешно нашли решение. Гибридный метод подтвердил точность.")
+        st.success("Оба метода успешно нашли решение.")
     elif not res_std.success and res_ml.success:
-        st.warning("Стандартный метод не сошелся (дивергенция). Гибридный метод успешно нашел решение за счет точного начального приближения.")
+        st.warning("Стандартный метод не сошелся. Гибридный метод успешно нашел решение.")
     else:
-        st.error("Ошибка сходимости: задача слишком сложная для текущей конфигурации обоих методов.")
+        st.error("Ошибка сходимости: задача слишком сложна для обоих методов.")
 
     # --- Визуализация ---
     col_graph, col_stats = st.columns([2, 1])
@@ -158,8 +158,11 @@ if st.button("Решить и сравнить"):
                   "Гибрид": [res_ml.niter if res_ml.success else "Провал", evals_ml, f"{t_ml:.4f}"]})
         if res_std.success and res_ml.success: st.metric("Ускорение", f"{evals_std / max(1, evals_ml):.1f}x")
 
+    # --- Базисные функции и Коэффициенты ---
     st.divider()
-    st.subheader("Базисные функции решения")
+    st.subheader("Анализ сплайна и коэффициенты")
+    
+    
     
     fig_b, ax_b = plt.subplots(figsize=(12, 4))
     x_fine = np.linspace(0, 1, 300)
@@ -167,3 +170,6 @@ if st.button("Решить и сравнить"):
         c_i = np.zeros(N_BASIS); c_i[i] = 1.0; y_b = y_coeffs[i] * BSpline(KNOTS, c_i, DEGREE)(x_fine)
         ax_b.plot(x_fine, y_b, alpha=0.5, linestyle='--')
     ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2); st.pyplot(fig_b)
+
+    st.write("Коэффициенты предсказанного сплайна c_i:")
+    st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
