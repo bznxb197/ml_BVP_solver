@@ -57,7 +57,6 @@ def bc_logic(ya, yb, p):
 # --- Интерфейс ---
 st.title("DeepBVP: Hybrid Neural Solver")
 
-# Расшифровка функций
 st.latex(r"\varepsilon y'' + p(x)y' + q(x)y + j y^2 + k y^3 = f(x)")
 with st.expander("Математическая структура функций", expanded=False):
     st.markdown("Уравнение строится на основе следующих зависимостей:")
@@ -68,34 +67,30 @@ with st.expander("Математическая структура функций
 # --- Боковая панель ---
 st.sidebar.header("Параметры задачи")
 
-if st.sidebar.button("Случайная задача"):
-    st.session_state.p = [
-        np.random.uniform(-4, -1.3),
-        np.random.uniform(-2, 2),
-        np.random.uniform(-2, 2),
-        *np.random.uniform(-3, 3, size=3),
-        np.random.uniform(-1.5, 1.5),
-        10**np.random.uniform(0, 0.7),
-        np.random.uniform(-1.5, 1.5),
-        10**np.random.uniform(0, 0.7),
-        *np.random.uniform(-3, 3, size=3),
-        np.random.uniform(-1.5, 1.5),
-        10**np.random.uniform(0, 0.7),
-        np.random.uniform(-1.5, 1.5),
-        10**np.random.uniform(0, 0.7),
-        np.random.uniform(-2.0, 2.0),
-        np.random.uniform(-1.0, 1.0),
-        np.random.uniform(-4, 4),
-        np.random.uniform(0.2, 0.8),
-        np.random.uniform(-2.0, -0.5),
-        *np.random.uniform(-3, 3, size=3)
-    ]
+col_rand1, col_rand2 = st.sidebar.columns(2)
+
+if col_rand1.button("Случайная"):
+    st.session_state.p = [np.random.uniform(-4, -1.3), np.random.uniform(-2, 2), np.random.uniform(-2, 2),
+                         *np.random.uniform(-3, 3, size=3), np.random.uniform(-1.5, 1.5), 10**np.random.uniform(0, 0.7),
+                         np.random.uniform(-1.5, 1.5), 10**np.random.uniform(0, 0.7), *np.random.uniform(-3, 3, size=3),
+                         np.random.uniform(-1.5, 1.5), 10**np.random.uniform(0, 0.7), np.random.uniform(-1.5, 1.5),
+                         10**np.random.uniform(0, 0.7), np.random.uniform(-2.0, 2.0), np.random.uniform(-1.0, 1.0),
+                         np.random.uniform(-4, 4), np.random.uniform(0.2, 0.8), np.random.uniform(-2.0, -0.5),
+                         *np.random.uniform(-3, 3, size=3)]
+
+if col_rand2.button("Сложная"):
+    st.session_state.p = [np.random.uniform(-4.0, -3.7), np.random.uniform(-2, 2), np.random.uniform(-2, 2),
+                         *np.random.uniform(-3, 3, size=3), np.random.uniform(1.2, 1.5), np.random.uniform(4.5, 5.0),
+                         np.random.uniform(1.2, 1.5), np.random.uniform(4.5, 5.0), *np.random.uniform(-3, 3, size=3),
+                         np.random.uniform(1.2, 1.5), np.random.uniform(4.5, 5.0), np.random.uniform(1.2, 1.5),
+                         np.random.uniform(4.5, 5.0), np.random.uniform(1.8, 2.0), np.random.uniform(0.9, 1.0),
+                         np.random.uniform(3.5, 4.0), np.random.choice([0.15, 0.85]), np.random.uniform(-1.8, -1.6),
+                         *np.random.uniform(-3, 3, size=3)]
 
 if 'p' not in st.session_state:
     st.session_state.p = [-2.0, 0.0, 1.0] + [0.0]*22
 
 p_ml_input = [] 
-
 with st.sidebar.expander("Базовые параметры", expanded=True):
     eps_val = st.number_input("Параметр epsilon", 0.0001, 0.1000, float(10**st.session_state.p[0]), format="%.4f", step=0.0001)
     p_ml_input.append(np.log10(eps_val))
@@ -106,13 +101,11 @@ with st.sidebar.expander("Базовые параметры", expanded=True):
 
 with st.sidebar.expander("Функции p(x) и q(x)"):
     for i in range(3, 17):
-        val = st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f")
-        p_ml_input.append(val)
+        p_ml_input.append(st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
 
 with st.sidebar.expander("Нелинейность и Источник"):
     for i in range(17, 25):
-        val = st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f")
-        p_ml_input.append(val)
+        p_ml_input.append(st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
 
 # --- Расчет ---
 if st.button("Решить и сравнить"):
@@ -122,73 +115,55 @@ if st.button("Решить и сравнить"):
     p_num[0] = 10**p_num[0] 
     if p_num[21] < 0: p_num[21] = 10**p_num[21]
     
-    # 1. Стандартный расчет
+    # 1. Стандарт
     st.session_state.eval_count = 0
     y_guess_lin = np.vstack([np.linspace(alpha, beta, 150), np.zeros(150)])
-    t0 = time.time()
-    res_std = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), 
-                        lambda ya,yb: bc_logic(ya,yb,p_num), 
-                        x_nodes, y_guess_lin, tol=1e-3)
-    t_std = time.time() - t0
-    evals_std = st.session_state.eval_count
+    t0 = time.time(); res_std = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), lambda ya,yb: bc_logic(ya,yb,p_num), x_nodes, y_guess_lin, tol=1e-3)
+    t_std = time.time() - t0; evals_std = st.session_state.eval_count
 
-    # 2. Подготовка нейросетевого приближения
+    # 2. ML Предсказание
     p_s = scalers['scaler_x'].transform(np.array(p_ml_input).reshape(1, -1))
     with torch.no_grad():
-        y_coeffs_s = model(torch.FloatTensor(p_s)).numpy()
-        y_coeffs = scalers['scaler_y'].inverse_transform(y_coeffs_s)[0]
-    
+        y_coeffs = scalers['scaler_y'].inverse_transform(model(torch.FloatTensor(p_s)).numpy())[0]
     spline = BSpline(KNOTS, y_coeffs, DEGREE, extrapolate=False)
     y_ml_init = spline(x_nodes)
-    y_guess_ml_stack = np.vstack([y_ml_init, np.gradient(y_ml_init, x_nodes)])
     
-    # 3. Гибридный расчет
+    # 3. Гибрид
     st.session_state.eval_count = 0
-    t1 = time.time()
-    res_ml = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), 
-                       lambda ya,yb: bc_logic(ya,yb,p_num), 
-                       x_nodes, y_guess_ml_stack, tol=1e-3)
-    t_ml = time.time() - t1
-    evals_ml = st.session_state.eval_count
+    t1 = time.time(); res_ml = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), lambda ya,yb: bc_logic(ya,yb,p_num), x_nodes, np.vstack([y_ml_init, np.gradient(y_ml_init, x_nodes)]), tol=1e-3)
+    t_ml = time.time() - t1; evals_ml = st.session_state.eval_count
+
+    # --- Уведомления о статусе ---
+    if res_std.success and res_ml.success:
+        st.success("Оба метода успешно нашли решение. Гибридный метод подтвердил точность.")
+    elif not res_std.success and res_ml.success:
+        st.warning("Стандартный метод не сошелся (дивергенция). Гибридный метод успешно нашел решение за счет точного начального приближения.")
+    else:
+        st.error("Ошибка сходимости: задача слишком сложная для текущей конфигурации обоих методов.")
 
     # --- Визуализация ---
     col_graph, col_stats = st.columns([2, 1])
-    
     with col_graph:
-        st.subheader("Визуализация решения")
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(x_nodes, np.linspace(alpha, beta, 150), color='gray', linestyle=':', alpha=0.4, label='Linear Start')
         ax.plot(x_nodes, y_ml_init, 'r--', alpha=0.6, label='ML Initial Guess')
-        if res_ml.success:
-            ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2.5, label='Hybrid Solution')
-        if res_std.success:
-            ax.plot(res_std.x, res_std.y[0], color='orange', linestyle='-.', alpha=0.6, label='Standard Result')
-        ax.legend()
-        ax.grid(True, alpha=0.2)
-        st.pyplot(fig)
+        if res_ml.success: ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2.5, label='Hybrid Solution')
+        if res_std.success: ax.plot(res_std.x, res_std.y[0], color='orange', linestyle='-.', alpha=0.6, label='Standard Result')
+        ax.legend(); ax.grid(True, alpha=0.2); st.pyplot(fig)
 
     with col_stats:
-        st.subheader("Метрики эффективности")
-        st.table({
-            "Показатель": ["Итерации", "Вызовы функции", "Время метода (с)"],
-            "Стандарт": [res_std.niter if res_std.success else "Провал", evals_std, f"{t_std:.4f}"],
-            "Гибрид": [res_ml.niter if res_ml.success else "Провал", evals_ml, f"{t_ml:.4f}"]
-        })
-        if res_std.success and res_ml.success:
-            efficiency = evals_std / max(1, evals_ml)
-            st.metric("Коэффициент ускорения", f"{efficiency:.1f}x")
+        st.subheader("Метрики")
+        st.table({"Показатель": ["Итерации", "Вызовы f(x)", "Время (с)"],
+                  "Стандарт": [res_std.niter if res_std.success else "Провал", evals_std, f"{t_std:.4f}"],
+                  "Гибрид": [res_ml.niter if res_ml.success else "Провал", evals_ml, f"{t_ml:.4f}"]})
+        if res_std.success and res_ml.success: st.metric("Ускорение", f"{evals_std / max(1, evals_ml):.1f}x")
 
-    # --- Анализ сплайна ---
     st.divider()
-    st.subheader("Базисные функции B-сплайна")
+    st.subheader("Базисные функции решения")
     
     fig_b, ax_b = plt.subplots(figsize=(12, 4))
     x_fine = np.linspace(0, 1, 300)
     for i in range(N_BASIS):
-        c_i = np.zeros(N_BASIS); c_i[i] = 1.0
-        y_b = y_coeffs[i] * BSpline(KNOTS, c_i, DEGREE)(x_fine)
+        c_i = np.zeros(N_BASIS); c_i[i] = 1.0; y_b = y_coeffs[i] * BSpline(KNOTS, c_i, DEGREE)(x_fine)
         ax_b.plot(x_fine, y_b, alpha=0.5, linestyle='--')
-    ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2)
-    st.pyplot(fig_b)
-
-    st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
+    ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2); st.pyplot(fig_b)
