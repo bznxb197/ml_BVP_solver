@@ -120,3 +120,11 @@ $$L = L_{data} + \lambda \cdot \| \varepsilon y'' + p y' + q y + \dots - f \|^2$
 ### 4. Интеграция с LLM в качестве распознавателя типа уравнения (если решать несколько типов уравнений с тем же подходом)
 
 ---
+
+## Запуск и развертывание
+
+1. **Окружение**: Python 3.10+, `pip install streamlit torch numpy scipy matplotlib joblib`.
+2. **Артефакты**: В корне должны быть файлы `model_nn_v5_turbo.pth` и `scalers_v5.pkl`.
+3. **Запуск**:
+   ```bash
+   streamlit run app.py
