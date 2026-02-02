@@ -87,7 +87,8 @@ $$
 
 ### Кейс №1: Жесткий погранслой
 При $\varepsilon = 0.0002$ стандартный решатель часто выдает ошибку `Singular Jacobian`. Гибридный метод использует предсказанный скачок сплайна и успешно сходится.
-<img width="1362" height="591" alt="image" src="https://github.com/user-attachments/assets/6bd96eb9-9054-4e97-9557-f5b79e287858" />
+<img width="1401" height="594" alt="image" src="https://github.com/user-attachments/assets/a2ef7bf6-04cf-4969-a44c-4aede240dc62" />
+
 
 
 
