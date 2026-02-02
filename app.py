@@ -117,7 +117,7 @@ if st.button("Решить и сравнить"):
     
     # 1. Стандарт
     st.session_state.eval_count = 0
-    y_guess_lin = np.vstack([np.linspace(alpha, beta, 150), np.zeros(150)])
+    y_guess_lin = np.vstack([np.linspace(alpha, beta, len(x_nodes)), np.zeros(len(x_nodes))])
     t0 = time.time(); res_std = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), lambda ya,yb: bc_logic(ya,yb,p_num), x_nodes, y_guess_lin, tol=1e-3)
     t_std = time.time() - t0; evals_std = st.session_state.eval_count
 
