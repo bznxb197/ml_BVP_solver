@@ -9,35 +9,27 @@ from scipy.integrate import solve_bvp
 from scipy.interpolate import BSpline
 
 # --- Настройки страницы ---
-st.set_page_config(page_title="DeepBVP Solver Pro", layout="wide")
+st.set_page_config(page_title="DeepBVP Expert Solver", layout="wide")
 
-# --- Константы базиса (из твоего генератора) ---
+# --- Константы базиса (из генератора) ---
 DEGREE = 3
 N_BASIS = 16 
 knots_internal = np.linspace(0, 1, N_BASIS - DEGREE + 1)
 KNOTS = np.concatenate((np.zeros(DEGREE), knots_internal, np.ones(DEGREE)))
 
-# --- Модель V5 Turbo ---
-
+# --- Модель V5 Turbo (Архитектура по твоим логам) ---
 class BVPNetTurbo(nn.Module):
     def __init__(self, input_dim=25, output_dim=16):
         super(BVPNetTurbo, self).__init__()
-        # Восстанавливаем архитектуру по твоим логам:
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 512),      # net.0
-            nn.GELU(),                      # net.1
-            nn.BatchNorm1d(512),            # net.2
-            nn.Dropout(0.1),                # net.3
-            nn.Linear(512, 256),            # net.4
-            nn.GELU(),                      # net.5
-            nn.Linear(256, 256),            # net.6 
-            nn.GELU(),                      # net.7
-            nn.Linear(256, 128),            # net.8 
-            nn.GELU(),                      # net.9
-            nn.Linear(128, output_dim)      # net.10 
+            nn.Linear(input_dim, 512), nn.GELU(),
+            nn.BatchNorm1d(512), nn.Dropout(0.1),
+            nn.Linear(512, 256), nn.GELU(),
+            nn.Linear(256, 256), nn.GELU(),
+            nn.Linear(256, 128), nn.GELU(),
+            nn.Linear(128, output_dim)
         )
-    def forward(self, x): 
-        return self.net(x)
+    def forward(self, x): return self.net(x)
 
 @st.cache_resource
 def load_assets():
@@ -49,7 +41,7 @@ def load_assets():
 
 # --- Математическое ядро ---
 def ode_system_logic(x, y, p):
-    # p[0] здесь уже должен быть реальный eps (не логарифм)
+    # p[0] - eps, p[1..2] - bc, далее коэффициенты функций
     eps = p[0]
     px = p[3] + p[4]*x + p[5]*x**2 + p[6]*np.sin(p[7]*x) + p[8]*np.cos(p[9]*x)
     qx = p[10] + p[11]*x + p[12]*x**2 + p[13]*np.sin(p[14]*x) + p[15]*np.cos(p[16]*x)
@@ -61,33 +53,26 @@ def bc_logic(ya, yb, p):
 
 # --- Интерфейс ---
 st.title("DeepBVP: Hybrid Neural Solver (решатель краевых задач)")
-
-# Описание уравнения
 st.latex(r"\varepsilon y'' + p(x)y' + q(x)y + j y^2 + k y^3 = f(x)")
-with st.expander("Посмотреть структуру функций"):
-    st.latex(r"p(x) = p_0 + p_1 x + p_2 x^2 + w_1 \sin(w_2 x) + v_1 \cos(v_2 x)")
-    st.latex(r"q(x) = q_0 + q_1 x + q_2 x^2 + e_1 \sin(e_2 x) + u_1 \cos(u_2 x)")
-    st.latex(r"f(x) = A \exp\left(-\frac{(x-\mu)^2}{\sigma^2}\right) + c_0 + c_1 x + c_2 x^2")
 
-# --- Сайдбар с 25 параметрами ---
-st.sidebar.header("Параметры ОДУ")
+# --- Сайдбар ---
+st.sidebar.header("Параметры задачи")
 
 if st.sidebar.button("Случайная задача"):
-    # Генерируем в точности по get_params()
     st.session_state.p = [
         np.random.uniform(-4, -1.3), # log10 eps
         np.random.uniform(-2, 2),    # alpha
         np.random.uniform(-2, 2),    # beta
         *np.random.uniform(-3, 3, size=3), # p0,1,2
         np.random.uniform(-1.5, 1.5),# w1
-        np.random.uniform(1, 5),     # w2
+        10**np.random.uniform(0, 0.7),# w2
         np.random.uniform(-1.5, 1.5),# v1
-        np.random.uniform(1, 5),     # v2
+        10**np.random.uniform(0, 0.7),# v2
         *np.random.uniform(-3, 3, size=3), # q0,1,2
         np.random.uniform(-1.5, 1.5),# e1
-        np.random.uniform(1, 5),     # e2
+        10**np.random.uniform(0, 0.7),# e2
         np.random.uniform(-1.5, 1.5),# u1
-        np.random.uniform(1, 5),     # u2
+        10**np.random.uniform(0, 0.7),# u2
         np.random.uniform(-2.0, 2.0),# j
         np.random.uniform(-1.0, 1.0),# k
         np.random.uniform(-4, 4),    # A
@@ -96,142 +81,108 @@ if st.sidebar.button("Случайная задача"):
         *np.random.uniform(-3, 3, size=3) # c0,1,2
     ]
 
-# Инициализация сессии
 if 'p' not in st.session_state:
     st.session_state.p = [-2.0, 0.0, 1.0] + [0.0]*22
 
-p_ui = []
-# Группировка для удобства
-with st.sidebar.expander("Граничные условия и ε", expanded=True):
-    p_ui.append(st.slider("log10(ε)", -4.0, -1.3, float(st.session_state.p[0])))
-    p_ui.append(st.slider("α (y0)", -2.0, 2.0, float(st.session_state.p[1])))
-    p_ui.append(st.slider("β (y1)", -2.0, 2.0, float(st.session_state.p[2])))
+p_ml_input = [] # Список для нейросети (где eps в log10)
 
-with st.sidebar.expander("Функция p(x)"):
-    for i in range(3, 10):
-        p_ui.append(st.number_input(f"p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+with st.sidebar.expander("Базовые параметры (ε, ГУ)", expanded=True):
+    # Прямой ввод eps
+    eps_val = st.number_input("Параметр ε", 0.0001, 0.1000, float(10**st.session_state.p[0]), format="%.4f", step=0.0001)
+    p_ml_input.append(np.log10(eps_val))
+    
+    alpha = st.slider("α (y(0))", -2.0, 2.0, float(st.session_state.p[1]))
+    p_ml_input.append(alpha)
+    
+    beta = st.slider("β (y(1))", -2.0, 2.0, float(st.session_state.p[2]))
+    p_ml_input.append(beta)
 
-with st.sidebar.expander("Функция q(x)"):
-    for i in range(10, 17):
-        p_ui.append(st.number_input(f"p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+with st.sidebar.expander("Функции p(x) и q(x)"):
+    for i in range(3, 17):
+        val = st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f")
+        p_ml_input.append(val)
 
 with st.sidebar.expander("Нелинейность и Источник"):
     for i in range(17, 25):
-        p_ui.append(st.number_input(f"p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+        val = st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f")
+        p_ml_input.append(val)
 
-# --- Расчет ---
-if st.button("Решить уравнение"):
+# --- Расчетная часть ---
+if st.button("Решить и сравнить"):
     model, scalers = load_assets()
     x_nodes = np.linspace(0, 1, 150)
     
-    # Подготовка параметров
-    p_numeric = np.array(p_ui).copy()
-    p_numeric[0] = 10**p_numeric[0]  # Из log10 в реальный eps
+    # Подготовка p_numeric (для ODE - eps обычный)
+    p_numeric = np.array(p_ml_input).copy()
+    p_numeric[0] = 10**p_numeric[0] # eps_val
     if p_numeric[21] < 0: p_numeric[21] = 10**p_numeric[21] # sigma
     
-    # 1. СТАНДАРТНЫЙ SOLVER (из прямой)
-    y_guess_std = np.vstack([np.linspace(p_numeric[1], p_numeric[2], len(x_nodes)), np.zeros(len(x_nodes))])
+    # 1. СТАНДАРТНЫЙ СТАРТ (Замер времени)
+    y_guess_lin = np.vstack([np.linspace(alpha, beta, 150), np.zeros(150)])
     t0 = time.time()
     res_std = solve_bvp(lambda x,y: ode_system_logic(x,y,p_numeric), 
                         lambda ya,yb: bc_logic(ya,yb,p_numeric), 
-                        x_nodes, y_guess_std, tol=1e-3)
+                        x_nodes, y_guess_lin, tol=1e-3)
     t_std = time.time() - t0
 
-    # 2. HYBRID SOLVER (ML Start)
-    t1 = time.time()
-    # На вход модели подаем параметры как в датасете (eps уже в log10)
-    p_ml = np.array(p_ui).reshape(1, -1)
-    p_s = scalers['scaler_x'].transform(p_ml)
-    
+    # 2. ПОДГОТОВКА ML (Вне замера численного метода)
+    p_s = scalers['scaler_x'].transform(np.array(p_ml_input).reshape(1, -1))
     with torch.no_grad():
         y_coeffs_s = model(torch.FloatTensor(p_s)).numpy()
         y_coeffs = scalers['scaler_y'].inverse_transform(y_coeffs_s)[0]
     
-    # Сплайн-приближение
     spline = BSpline(KNOTS, y_coeffs, DEGREE, extrapolate=False)
-    y_guess_ml = spline(x_nodes)
-    y_guess_ml_stack = np.vstack([y_guess_ml, np.gradient(y_guess_ml, x_nodes)])
+    y_ml_init = spline(x_nodes)
+    y_guess_ml_stack = np.vstack([y_ml_init, np.gradient(y_ml_init, x_nodes)])
     
+    # 3. ГИБРИДНЫЙ СТАРТ (Замер времени уточнения)
+    t1 = time.time()
     res_ml = solve_bvp(lambda x,y: ode_system_logic(x,y,p_numeric), 
                        lambda ya,yb: bc_logic(ya,yb,p_numeric), 
                        x_nodes, y_guess_ml_stack, tol=1e-3)
     t_ml = time.time() - t1
 
-    # --- Результаты ---
     # --- Визуализация ---
-
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        st.subheader("График решения y(x)")
+    col_graph, col_stats = st.columns([2, 1])
+    
+    with col_graph:
+        st.subheader("Визуализация решения")
         fig, ax = plt.subplots(figsize=(10, 6))
-        # 0. СТАНДАРТНЫЙ СТАРТ (Линейное приближение)
-        y_linear_guess = np.linspace(p_numeric[1], p_numeric[2], len(x_nodes))
-        ax.plot(x_nodes, y_linear_guess, color='gray', linestyle=':', alpha=0.5, label='Standard Start (Linear)')
-        # 1. Пунктир — то, что угадала нейронка
-      
-        ax.plot(x_nodes, y_guess_ml, 'r--', label='ML Initial Guess', alpha=0.4)
+        ax.plot(x_nodes, np.linspace(alpha, beta, 150), 'gray', linestyle=':', alpha=0.4, label='Linear Start')
+        ax.plot(x_nodes, y_ml_init, 'r--', alpha=0.6, label='ML Initial Guess')
         
-        # 2. Оранжевая линия — результат стандартного метода
-        if res_std.success:
-            ax.plot(res_std.x, res_std.y[0], color='orange', linestyle=':', linewidth=2, label='Standard Solver')
-        else:
-            st.warning("Стандартный метод не смог найти решение (Diverged)")
-
-        # 3. Синяя линия — результат твоего гибридного метода
         if res_ml.success:
-            ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2, label='DeepBVP Solution (Hybrid)')
-            st.success("Гибридный метод успешно сошелся!")
-        else:
-            st.error("Даже гибридный метод не сошелся. Попробуй увеличить ε.")
-
-        ax.set_xlabel("x")
-        ax.set_ylabel("y(x)")
+            ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2.5, label='Hybrid Solution')
+        if res_std.success:
+            ax.plot(res_std.x, res_std.y[0], 'orange', linestyle='-.', alpha=0.6, label='Standard Result')
+            
         ax.legend()
         ax.grid(True, alpha=0.2)
         st.pyplot(fig)
-    
-    with c2:
-        st.subheader("📈 Эффективность")
+
+    with col_stats:
+        st.subheader("Метрики")
         st.table({
-            "Метод": ["Стандартный solve_bvp", "DeepBVP (Hybrid)"],
-            "Итерации": [res_std.niter if res_std.success else "Fail", res_ml.niter if res_ml.success else "Fail"],
-            "Время (сек)": [f"{t_std:.4f}", f"{t_ml:.4f}"],
-            "Статус": ["ОК" if res_std.success else "Провал", "ОК" if res_ml.success else "Провал"]
+            "Показатель": ["Итерации", "Вычисления (nfev)", "Время метода (с)"],
+            "Стандарт": [res_std.niter if res_std.success else "Провал", res_std.nfev if res_std.success else "—", f"{t_std:.4f}"],
+            "Гибрид": [res_ml.niter if res_ml.success else "Провал", res_ml.nfev if res_ml.success else "—", f"{t_ml:.4f}"]
         })
-    
-    # Вывод коэффициентов (используем y_coeffs из расчета выше)
-    st.divider()
-    st.subheader("Аналитическая форма сплайна")
-    st.latex(r"y(x) \approx \sum_{i=1}^{16} c_i \cdot B_i(x)")
-    st.write("Коэффициенты предсказанного сплайна $c_i$:")
-    st.json({f"c_{i+1}": float(c) for i, c in enumerate(y_coeffs)})
+        
+        if res_std.success and res_ml.success:
+            diff_fev = res_std.nfev - res_ml.nfev
+            st.metric("Экономия вычислений", f"{res_std.nfev / res_ml.nfev:.1f}x", delta=f"{-diff_fev} вызовов")
 
-# --- Блок визуализации базиса ---
+    # --- Анатомия сплайна ---
     st.divider()
-    st.subheader("Анатомия решения: Базисные функции B-сплайна")
-    st.markdown("""
-    Каждый коэффициент $c_i$ управляет высотой соответствующей базисной функции $B_i(x)$. 
-    Ниже показано, как итоговое решение (жирная линия) собирается из этих локальных участков.
-    """)
-
-    fig_basis, ax_b = plt.subplots(figsize=(10, 4))
-    
-    # Строим каждый базисный элемент отдельно
+    st.subheader("Базисные функции решения")
+    fig_b, ax_b = plt.subplots(figsize=(12, 4))
     x_fine = np.linspace(0, 1, 300)
     for i in range(N_BASIS):
-        c_basis = np.zeros(N_BASIS)
-        c_basis[i] = 1.0
-        # Взвешенный базис: c_i * B_i(x)
-        y_basis = y_coeffs[i] * BSpline(KNOTS, c_basis, DEGREE, extrapolate=False)(x_fine)
-        
-        # Рисуем только если вклад заметен
-        ax_b.plot(x_fine, y_basis, label=f"c{i+1}" if i < 8 else None, alpha=0.5, linestyle='--')
+        c = np.zeros(N_BASIS); c[i] = 1.0
+        y_b = y_coeffs[i] * BSpline(KNOTS, c, DEGREE)(x_fine)
+        ax_b.plot(x_fine, y_b, alpha=0.5, linestyle='--')
+    ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2, label="Итоговая кривая")
+    st.pyplot(fig_b)
 
-    # Итоговая сумма для наглядности
-    ax_b.plot(x_fine, spline(x_fine), 'k-', linewidth=3, label='Итоговое y(x)')
-    
-    ax_b.set_title("Вклад каждого коэффициента в итоговую форму")
-    ax_b.set_xlabel("x")
-    ax_b.set_ylabel("y_i(x) * c_i")
-    ax_b.grid(True, alpha=0.15)
-    st.pyplot(fig_basis)
+    st.write("Коэффициенты сплайна:")
+    st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
