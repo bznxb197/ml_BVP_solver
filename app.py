@@ -91,21 +91,41 @@ if 'p' not in st.session_state:
     st.session_state.p = [-2.0, 0.0, 1.0] + [0.0]*22
 
 p_ml_input = [] 
-with st.sidebar.expander("Базовые параметры", expanded=True):
-    eps_val = st.number_input("Параметр epsilon", 0.0001, 0.1000, float(10**st.session_state.p[0]), format="%.4f", step=0.0001)
-    p_ml_input.append(np.log10(eps_val))
-    alpha = st.slider("alpha (y0)", -2.0, 2.0, float(st.session_state.p[1]))
-    p_ml_input.append(alpha)
-    beta = st.slider("beta (y1)", -2.0, 2.0, float(st.session_state.p[2]))
-    p_ml_input.append(beta)
 
-with st.sidebar.expander("Функции p(x) и q(x)"):
-    for i in range(3, 17):
-        p_ml_input.append(st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+# Группировка параметров в боковой панели
+with st.sidebar.expander("Базовые параметры и ГУ", expanded=True):
+    eps_val = st.number_input("Параметр epsilon (ε)", 0.0001, 0.1000, float(10**st.session_state.p[0]), format="%.4f")
+    p_ml_input.append(np.log10(eps_val))
+    p_ml_input.append(st.slider("alpha (y0)", -2.0, 2.0, float(st.session_state.p[1])))
+    p_ml_input.append(st.slider("beta (y1)", -2.0, 2.0, float(st.session_state.p[2])))
+
+with st.sidebar.expander("Коэффициенты p(x)"):
+    p_ml_input.append(st.number_input("p0 (const)", value=float(st.session_state.p[3]), format="%.3f"))
+    p_ml_input.append(st.number_input("p1 (x)", value=float(st.session_state.p[4]), format="%.3f"))
+    p_ml_input.append(st.number_input("p2 (x^2)", value=float(st.session_state.p[5]), format="%.3f"))
+    p_ml_input.append(st.number_input("w1 (sin amp)", value=float(st.session_state.p[6]), format="%.3f"))
+    p_ml_input.append(st.number_input("w2 (sin freq)", value=float(st.session_state.p[7]), format="%.3f"))
+    p_ml_input.append(st.number_input("v1 (cos amp)", value=float(st.session_state.p[8]), format="%.3f"))
+    p_ml_input.append(st.number_input("v2 (cos freq)", value=float(st.session_state.p[9]), format="%.3f"))
+
+with st.sidebar.expander("Коэффициенты q(x)"):
+    p_ml_input.append(st.number_input("q0 (const)", value=float(st.session_state.p[10]), format="%.3f"))
+    p_ml_input.append(st.number_input("q1 (x)", value=float(st.session_state.p[11]), format="%.3f"))
+    p_ml_input.append(st.number_input("q2 (x^2)", value=float(st.session_state.p[12]), format="%.3f"))
+    p_ml_input.append(st.number_input("e1 (sin amp)", value=float(st.session_state.p[13]), format="%.3f"))
+    p_ml_input.append(st.number_input("e2 (sin freq)", value=float(st.session_state.p[14]), format="%.3f"))
+    p_ml_input.append(st.number_input("u1 (cos amp)", value=float(st.session_state.p[15]), format="%.3f"))
+    p_ml_input.append(st.number_input("u2 (cos freq)", value=float(st.session_state.p[16]), format="%.3f"))
 
 with st.sidebar.expander("Нелинейность и Источник"):
-    for i in range(17, 25):
-        p_ml_input.append(st.number_input(f"Параметр p[{i}]", value=float(st.session_state.p[i]), format="%.3f"))
+    p_ml_input.append(st.number_input("j (коэф. y^2)", value=float(st.session_state.p[17]), format="%.3f"))
+    p_ml_input.append(st.number_input("k (коэф. y^3)", value=float(st.session_state.p[18]), format="%.3f"))
+    p_ml_input.append(st.number_input("A (амплитуда f)", value=float(st.session_state.p[19]), format="%.3f"))
+    p_ml_input.append(st.number_input("mu (центр пика)", value=float(st.session_state.p[20]), format="%.3f"))
+    p_ml_input.append(st.number_input("log10 sigma (ширина)", value=float(st.session_state.p[21]), format="%.3f"))
+    p_ml_input.append(st.number_input("c0 (const f)", value=float(st.session_state.p[22]), format="%.3f"))
+    p_ml_input.append(st.number_input("c1 (x f)", value=float(st.session_state.p[23]), format="%.3f"))
+    p_ml_input.append(st.number_input("c2 (x^2 f)", value=float(st.session_state.p[24]), format="%.3f"))
 
 # --- Расчет ---
 if st.button("Решить и сравнить"):
@@ -117,7 +137,7 @@ if st.button("Решить и сравнить"):
     
     # 1. Стандарт
     st.session_state.eval_count = 0
-    y_guess_lin = np.vstack([np.linspace(alpha, beta, len(x_nodes)), np.zeros(len(x_nodes))])
+    y_guess_lin = np.vstack([np.linspace(p_ml_input[1], p_ml_input[2], len(x_nodes)), np.zeros(len(x_nodes))])
     t0 = time.time(); res_std = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), lambda ya,yb: bc_logic(ya,yb,p_num), x_nodes, y_guess_lin, tol=1e-3)
     t_std = time.time() - t0; evals_std = st.session_state.eval_count
 
@@ -133,19 +153,19 @@ if st.button("Решить и сравнить"):
     t1 = time.time(); res_ml = solve_bvp(lambda x,y: ode_system_logic(x,y,p_num), lambda ya,yb: bc_logic(ya,yb,p_num), x_nodes, np.vstack([y_ml_init, np.gradient(y_ml_init, x_nodes)]), tol=1e-3)
     t_ml = time.time() - t1; evals_ml = st.session_state.eval_count
 
-    # --- Уведомления о статусе ---
+    # --- Уведомления ---
     if res_std.success and res_ml.success:
-        st.success("Оба метода успешно нашли решение.")
+        st.success("Оба метода сошлись.")
     elif not res_std.success and res_ml.success:
-        st.warning("Стандартный метод не сошелся. Гибридный метод успешно нашел решение.")
+        st.warning("Стандартный метод не сошелся. Гибрид нашел решение.")
     else:
-        st.error("Ошибка сходимости: задача слишком сложна для обоих методов.")
+        st.error("Задача слишком сложна для обоих методов.")
 
     # --- Визуализация ---
     col_graph, col_stats = st.columns([2, 1])
     with col_graph:
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(x_nodes, np.linspace(alpha, beta, len(x_nodes)), color='gray', linestyle=':', alpha=0.4, label='Linear Start')
+        ax.plot(x_nodes, np.linspace(p_ml_input[1], p_ml_input[2], len(x_nodes)), color='gray', linestyle=':', alpha=0.4, label='Linear Start')
         ax.plot(x_nodes, y_ml_init, 'r--', alpha=0.6, label='ML Initial Guess')
         if res_ml.success: ax.plot(res_ml.x, res_ml.y[0], 'b-', linewidth=2.5, label='Hybrid Solution')
         if res_std.success: ax.plot(res_std.x, res_std.y[0], color='orange', linestyle='-.', alpha=0.6, label='Standard Result')
@@ -158,37 +178,15 @@ if st.button("Решить и сравнить"):
                   "Гибрид": [res_ml.niter if res_ml.success else "Провал", evals_ml, f"{t_ml:.4f}"]})
         if res_std.success and res_ml.success: st.metric("Ускорение", f"{evals_std / max(1, evals_ml):.1f}x")
 
-    # --- Базисные функции и Коэффициенты ---
+    # --- Анализ ---
     st.divider()
-    st.subheader("Анализ сплайна и коэффициенты")
+    st.subheader("Коэффициенты сплайна и параметры")
     
-    
-    
-    fig_b, ax_b = plt.subplots(figsize=(12, 4))
-    x_fine = np.linspace(0, 1, 300)
-    for i in range(N_BASIS):
-        c_i = np.zeros(N_BASIS); c_i[i] = 1.0; y_b = y_coeffs[i] * BSpline(KNOTS, c_i, DEGREE)(x_fine)
-        ax_b.plot(x_fine, y_b, alpha=0.5, linestyle='--')
-    ax_b.plot(x_fine, spline(x_fine), 'b-', linewidth=2); st.pyplot(fig_b)
-
-    st.write("Коэффициенты предсказанного сплайна c_i:")
-    # --- Базисные функции и Коэффициенты ---
-    st.divider()
-    
-    col_coeffs_ml, col_coeffs_input = st.columns(2)
-    
-    with col_coeffs_ml:
-        st.subheader("Коэффициенты сплайна $c_i$")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.write("Веса базисных функций $c_i$:")
         st.json({f"c_{i+1}": float(val) for i, val in enumerate(y_coeffs)})
-
-    with col_coeffs_input:
-        st.subheader("Параметры уравнения")
-        # Сопоставляем p_ml_input с математическими именами из формул
-        param_names = [
-            "log10(eps)", "alpha", "beta", 
-            "p0", "p1", "p2", "w1", "w2", "v1", "v2", 
-            "q0", "q1", "q2", "e1", "e2", "u1", "u2",
-            "j (y^2)", "k (y^3)", 
-            "A (source)", "mu", "log10(sigma)", "c0", "c1", "c2"
-        ]
+    with c2:
+        st.write("Входные параметры:")
+        param_names = ["log10(eps)", "alpha", "beta", "p0", "p1", "p2", "w1", "w2", "v1", "v2", "q0", "q1", "q2", "e1", "e2", "u1", "u2", "j", "k", "A", "mu", "log10(sigma)", "c0", "c1", "c2"]
         st.json({name: float(val) for name, val in zip(param_names, p_ml_input)})
