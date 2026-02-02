@@ -110,7 +110,7 @@ with st.sidebar.expander("Нелинейность и Источник"):
 # --- Расчет ---
 if st.button("Решить и сравнить"):
     model, scalers = load_assets()
-    x_nodes = np.linspace(0, 1, 150)
+    x_nodes = np.linspace(0, 1, 500)
     p_num = np.array(p_ml_input).copy()
     p_num[0] = 10**p_num[0] 
     if p_num[21] < 0: p_num[21] = 10**p_num[21]
