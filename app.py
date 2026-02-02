@@ -57,7 +57,12 @@ def bc_logic(ya, yb, p):
 # --- Интерфейс ---
 st.title("DeepBVP: Hybrid Neural Solver")
 
-st.latex(r"\varepsilon y'' + p(x)y' + q(x)y + j y^2 + k y^3 = f(x)")
+st.latex(r"""
+\begin{cases} 
+\varepsilon y'' + p(x)y' + q(x)y + j y^2 + k y^3 = f(x) \\
+y(0) = \alpha, \quad y(1) = \beta
+\end{cases}
+""")
 with st.expander("Математическая структура функций", expanded=False):
     st.markdown("Уравнение строится на основе следующих зависимостей:")
     st.latex(r"p(x) = p_0 + p_1 x + p_2 x^2 + w_1 \sin(w_2 x) + v_1 \cos(v_2 x)")
