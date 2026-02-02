@@ -164,7 +164,9 @@ if st.button("Решить уравнение"):
     with c1:
         st.subheader("График решения y(x)")
         fig, ax = plt.subplots(figsize=(10, 6))
-        
+        # 0. СТАНДАРТНЫЙ СТАРТ (Линейное приближение)
+        y_linear_guess = np.linspace(p_numeric[1], p_numeric[2], len(x_nodes))
+        ax.plot(x_nodes, y_linear_guess, color='gray', linestyle=':', alpha=0.5, label='Standard Start (Linear)')
         # 1. Пунктир — то, что угадала нейронка
       
         ax.plot(x_nodes, y_guess_ml, 'r--', label='ML Initial Guess', alpha=0.4)
