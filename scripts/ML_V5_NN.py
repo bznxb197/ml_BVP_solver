@@ -14,7 +14,7 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # 1. Загрузка, фильтрация выбросов, подготовка
-df = pd.read_csv("/Users/aleksandrcernyh/numeric_ML/ml_BVP_solver/dataset_V4.csv")
+df = pd.read_csv("dataset_V4.csv")
 Y_raw = df.iloc[:, 25:].values
 mask  = (np.abs(Y_raw) < 10).all(axis=1)
 df    = df[mask]
